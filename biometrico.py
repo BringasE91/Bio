@@ -1,7 +1,5 @@
 from zk import ZK, const
 
-DEVICE_IP = '192.168.1.201'
-DEVICE_PORT = 4370
 
 def obtener_asistencias(ip, puerto):
 
@@ -13,9 +11,9 @@ def obtener_asistencias(ip, puerto):
         conn.disable_device()
 
         asistencias = conn.get_attendance()
-        if asistencias:
-            for asistencia in asistencias:
-                registros.append((asistencia.user_id, asistencia.timestamp))
+
+        for asistencia in asistencias:
+            registros.append((asistencia.user_id, asistencia.timestamp))
 
         conn.enable_device()
         conn.disconnect()
