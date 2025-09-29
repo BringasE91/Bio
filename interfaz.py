@@ -20,7 +20,7 @@ def descargar_asistencia():
         messagebox.showerror("Error", str(e))
 
 def solo_numeros(char):
-    return char.isdigit() or char == ""
+    return (char.isdigit() or char == "") and len(char) <= 5
 
 def solo_ip(char):
     # Permite solo dígitos, puntos o vacío
@@ -46,6 +46,7 @@ entry_ip.grid(row=0, column=1, padx=5)
 tk.Label(frame_conexion, text="Puerto:").grid(row=1, column=0, padx=5)
 entry_puerto = tk.Entry(frame_conexion, validate="key", validatecommand=vcmd_puerto)
 entry_puerto.grid(row=1, column=1, padx=5)
+entry_puerto.insert(0, "4370")  # Valor por defecto
 
 #botones
 btn_asistencia = tk.Button(root, text="Descargar asistencia", command=descargar_asistencia)
