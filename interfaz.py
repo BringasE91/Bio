@@ -4,7 +4,7 @@ from biometrico import obtener_asistencias
 
 def descargar_asistencia():
     try:
-        registros = obtener_asistencias()
+        registros = obtener_asistencias(entry_ip.get(), int(entry_puerto.get()) or 4370)
         tree.delete(*tree.get_children())
         if registros:
             for usuario, fecha in registros:
@@ -20,8 +20,20 @@ root = tk.Tk()
 root.title("Asistencias ZKTeco")
 root.geometry("500x500")
 
+# frame para el IP y puerto
+frame_conexion = tk.Frame(root)
+frame_conexion.pack(pady=10)
+
+tk.Label(frame_conexion, text="IP del dispositivo:").grid(row=0, column=0, padx=5)
+entry_ip = tk.Entry(frame_conexion)
+entry_ip.grid(row=0, column=1, padx=5)
+
+tk.Label(frame_conexion, text="Puerto:").grid(row=1, column=0, padx=5)
+entry_puerto = tk.Entry(frame_conexion)
+entry_puerto.grid(row=1, column=1, padx=5)
+
 #botones
-btn_asistencia = tk.Button(root, text="Descargar asistencia")
+btn_asistencia = tk.Button(root, text="Descargar asistencia", command=descargar_asistencia)
 btn_asistencia.pack(pady=10)
 
 #tabla
