@@ -9,6 +9,8 @@ def descargar_asistencia():
     # convertir idDispositivo a int si es numérico
     if idDispositivo.isdigit():
         idDispositivo = int(idDispositivo)
+    elif idDispositivo == "":
+        idDispositivo = 0
 
     if not ip or not puerto:
         messagebox.showwarning("Campos requeridos", "Por favor, ingresa la IP y el puerto del dispositivo.")
@@ -73,14 +75,21 @@ btn_asistencia.pack(pady=10)
 
 #tabla
 columns = ("Usuario", "Id_Bio", "Fecha-Hora")
-tree = ttk.Treeview(root, columns=columns, show="headings")
+frame_tabla = tk.Frame(root)
+frame_tabla.pack(fill="both", expand=True, padx=10, pady=10)
+
+tree = ttk.Treeview(frame_tabla, columns=columns, show="headings")
 tree.heading("Usuario", text="Usuario")
 tree.heading("Id_Bio", text="Id-Bio")
 tree.heading("Fecha-Hora", text="Fecha-Hora")
-# Ajustar anchos de columna: hacer Id_Bio más delgada
 tree.column("Usuario", width=200, anchor='w')
 tree.column("Id_Bio", width=50, minwidth=30, anchor='center', stretch=False)
 tree.column("Fecha-Hora", width=200, anchor='center')
-tree.pack(fill="both", expand=True, padx=10, pady=10)
+
+# Barra de desplazamiento vertical
+scrollbar_y = ttk.Scrollbar(frame_tabla, orient="vertical", command=tree.yview)
+tree.configure(yscrollcommand=scrollbar_y.set)
+scrollbar_y.pack(side="right", fill="y")
+tree.pack(side="left", fill="both", expand=True)
 
 root.mainloop()
