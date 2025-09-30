@@ -1,6 +1,8 @@
 import tkinter as tk
 from tkinter import messagebox, ttk
 from biometrico import obtener_asistencias
+from tkinter import filedialog
+import openpyxl
 
 def descargar_asistencia():
     ip = entry_ip.get().strip()
@@ -26,6 +28,30 @@ def descargar_asistencia():
     except Exception as e:
         messagebox.showerror("Error", str(e))
 
+
+def exportar_excel():
+    # Crear libro y hoja
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Asistencias"
+
+    # Escribir encabezados
+    ws.append(["Usuario", "Id_Bio", "Fecha-Hora"])
+
+    # Escribir filas del tree
+    for row_id in tree.get_children():
+        row = tree.item(row_id)['values']
+        ws.append(row)
+
+    # Seleccionar ubicación y guardar
+    archivo = filedialog.asksaveasfilename(
+        defaultextension=".xlsx",
+        filetypes=[("Archivos Excel", "*.xlsx")],
+        title="Guardar como"
+    )
+    if archivo:
+        wb.save(archivo)
+        messagebox.showinfo("Éxito", f"Archivo guardado en:\n{archivo}")
 
 
 #validacion solo puerto y idBiometrico
@@ -72,6 +98,9 @@ entry_id.insert(0, "0")  # Valor por defecto
 #botones
 btn_asistencia = tk.Button(root, text="Descargar asistencia", command=descargar_asistencia)
 btn_asistencia.pack(pady=10)
+
+btn_exportar = tk.Button(root, text="Exportar a Excel", command=exportar_excel)
+btn_exportar.pack(pady=10)
 
 #tabla
 columns = ("Usuario", "Id_Bio", "Fecha-Hora")
