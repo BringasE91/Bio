@@ -15,7 +15,7 @@ def descargar_asistencia():
         idDispositivo = int(idDispositivo)
     elif idDispositivo == "":
         idDispositivo = 0
-    tipo_marcacion = "Digital"  # Valor fijo por ahora
+    tipo_marcacion = 1  # Valor fijo por ahora
 
     if not ip or not puerto:
         messagebox.showwarning("Campos requeridos", "Por favor, ingresa la IP y el puerto del dispositivo.")
@@ -28,6 +28,11 @@ def descargar_asistencia():
                 # dividir fecha en fecha y hora en el primer espacio
                 s = str(fecha)
                 fecha_str, _, hora_str = s.partition(' ')
+                # cambiar formato fecha de AAAA-MM-DD a DD/MM/AAAA
+                año_str, mes_str, dia_str = fecha_str.split('-')
+                fecha_str = f"{dia_str}/{mes_str}/{año_str}"
+                # quitar segundos de hora
+                hora_str = hora_str[:5]
                 # si no hay espacio, hora_str será '' automáticamente
                 tree.insert("", "end", values=(usuario, idDispositivo, tipo_marcacion, fecha_str, hora_str))
         else:
@@ -53,15 +58,20 @@ def exportar_excel():
                 for cell in row:
                     cell.value = None
 
-        # Volcar filas del tree (suponiendo que tree tiene 4 columnas: Usuario, Id_Bio, Fecha, Hora)
+        # Volcar filas del tree (se asume columns = Usuario, Id_Bio, Tipo_marcacion, Fecha, Hora)
         for row_id in tree.get_children():
-            row = tree.item(row_id)['values']
-            ws.append(row)
-        # Preguntar al usuario dónde guardar la copia (por defecto en carpeta assets)
+            values = tree.item(row_id)['values']
+            ws.append(values)
+
+        # Preguntar al usuario dónde guardar la copia (por defecto en carpeta escritorio)
         ts = datetime.now().strftime("%Y%m%d_%H%M%S")
         base, ext = os.path.splitext(os.path.basename(plantilla_path))
         default_name = f"{base}_{ts}{ext}"
-        initial_dir = os.path.dirname(plantilla_path)
+        # intentar establecer como carpeta inicial el Escritorio del usuario
+        initial_dir = os.path.join(os.path.expanduser("~"), "Desktop")
+        if not os.path.isdir(initial_dir):
+            # si no existe Desktop (por ejemplo en algunos sistemas), usar el home
+            initial_dir = os.path.expanduser("~")
 
         archivo = filedialog.asksaveasfilename(
             defaultextension=ext,
@@ -80,7 +90,7 @@ def exportar_excel():
         messagebox.showerror("Error al guardar", f"No se pudo actualizar la plantilla:\n{e}")
 
 
-#validacion solo puerto y idBiometrico
+#validacion solo puerto
 def solo_puerto(char):
     return (char.isdigit() or char == "") and len(char) <= 5
 
@@ -96,21 +106,22 @@ def solo_id_bio(char):
 
 #ventana principal
 root = tk.Tk()
-root.title("Asistencias ZKTeco")
+root.title("SIGA Asistencias Biométrico")
 root.geometry("500x500")
 
 vcmd_ip = (root.register(solo_ip), "%P")
 vcmd_puerto = (root.register(solo_puerto), "%P")
 vcmd_dispositivo = (root.register(solo_id_bio), "%P")
 
-# frame para el IP y puerto
+# frame para el IP , puerto y id dispositivo
 frame_conexion = tk.Frame(root)
 frame_conexion.pack(pady=10)
 
+#etiquetas y entradas
 tk.Label(frame_conexion, text="IP del dispositivo:").grid(row=0, column=0, padx=5)
 entry_ip = tk.Entry(frame_conexion, validate="key", validatecommand=vcmd_ip)
 entry_ip.grid(row=0, column=1, padx=5)
-entry_ip.insert(0, "192.168.1.201")  # Valor por defecto
+entry_ip.insert(0, "192.168.1.167")  # Valor por defecto
 
 tk.Label(frame_conexion, text="Puerto:").grid(row=1, column=0, padx=5)
 entry_puerto = tk.Entry(frame_conexion, validate="key", validatecommand=vcmd_puerto)
@@ -122,34 +133,36 @@ entry_id = tk.Entry(frame_conexion, validate="key", validatecommand=vcmd_disposi
 entry_id.grid(row=2, column=1, padx=5)
 entry_id.insert(0, "0")  # Valor por defecto
 
-#botones
+#boton descargar asistencia
 btn_asistencia = tk.Button(root, text="Descargar asistencia", command=descargar_asistencia)
 btn_asistencia.pack(pady=10)
 
-btn_exportar = tk.Button(root, text="Exportar a Excel", command=exportar_excel)
-btn_exportar.pack(pady=10)
-
-#tabla
-columns = ("Usuario", "Id_Bio", "Tipo_marcacion", "Fecha","Hora")
+#tabla asistencias frame
 frame_tabla = tk.Frame(root)
 frame_tabla.pack(fill="both", expand=True, padx=10, pady=10)
 
+#tabla asistencias
+columns = ("Usuario", "Id_Bio", "Tipo_marcacion", "Fecha","Hora")
 tree = ttk.Treeview(frame_tabla, columns=columns, show="headings")
-tree.heading("Usuario", text="Usuario")
-tree.heading("Id_Bio", text="Id-Bio")
+tree.heading("Usuario", text="Id usuario")
+tree.heading("Id_Bio", text="Id Bio")
 tree.heading("Tipo_marcacion", text="Tipo Marcacion")
 tree.heading("Fecha", text="Fecha")
 tree.heading("Hora", text="Hora")
-tree.column("Usuario", width=100, anchor='w')
-tree.column("Id_Bio", width=50, anchor='center', stretch=False)
-tree.column("Tipo_marcacion", width=50, anchor='center')
-tree.column("Fecha", width=100, anchor='center')
-tree.column("Hora", width=100, anchor='center')
+tree.column("Usuario", width=100, anchor='center')
+tree.column("Id_Bio", width=70, anchor='center')
+tree.column("Tipo_marcacion", width=100, anchor='center')
+tree.column("Fecha", width=70, anchor='center')
+tree.column("Hora", width=70, anchor='center')
 
-# Barra de desplazamiento vertical
+# Barra de desplazamiento vertical de la tabla asistencias
 scrollbar_y = ttk.Scrollbar(frame_tabla, orient="vertical", command=tree.yview)
 tree.configure(yscrollcommand=scrollbar_y.set)
 scrollbar_y.pack(side="right", fill="y")
 tree.pack(side="left", fill="both", expand=True)
+
+#boton exportar a excel
+btn_exportar = tk.Button(root, text="Exportar a Excel", command=exportar_excel)
+btn_exportar.pack(pady=5)
 
 root.mainloop()
