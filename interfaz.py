@@ -33,7 +33,7 @@ def descargar_asistencia():
         else:
             messagebox.showinfo("Información", "No se encontraron registros")
     except Exception as e:
-        messagebox.showerror("Error", str(e))
+        messagebox.showerror("Error", str(e)) 
 
 
 def exportar_excel():
