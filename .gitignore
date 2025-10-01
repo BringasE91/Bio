@@ -1,0 +1,23 @@
+# Ignore build and distribution folders created by PyInstaller
+/dist/
+/build/
+
+# Python cache and compiled files
+__pycache__/
+*.py[cod]
+
+# Virtual environments
+.venv/
+env/
+venv/
+
+# Byte-compiled / optimized / DLL files
+*.so
+*.dylib
+
+# Editor directories and files
+.vscode/
+*.swp
+
+# OS files
+.DS_Store
