@@ -5,6 +5,13 @@ from tkinter import filedialog
 import openpyxl
 import os
 from datetime import datetime
+import sys
+import os
+
+def resource_path(*parts):
+    """Devuelve la ruta absoluta a un recurso empaquetado (o en desarrollo)."""
+    base = getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(__file__)))
+    return os.path.join(base, *parts)
 
 def descargar_asistencia():
     ip = entry_ip.get().strip()
@@ -43,7 +50,7 @@ def descargar_asistencia():
 
 def exportar_excel():
     # Rellena la plantilla existente en assets
-    plantilla_path = os.path.join(os.path.dirname(__file__), "assets", "Plantilla.xlsx")
+    plantilla_path = resource_path("assets", "Plantilla.xlsx")
     if not os.path.exists(plantilla_path):
         messagebox.showerror("Plantilla no encontrada", f"No se encontró la plantilla en:\n{plantilla_path}")
         return
