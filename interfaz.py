@@ -3,6 +3,8 @@ from tkinter import messagebox, ttk
 from biometrico import obtener_asistencias
 from tkinter import filedialog
 import openpyxl
+import os
+from datetime import datetime
 
 def descargar_asistencia():
     ip = entry_ip.get().strip()
@@ -13,6 +15,7 @@ def descargar_asistencia():
         idDispositivo = int(idDispositivo)
     elif idDispositivo == "":
         idDispositivo = 0
+    tipo_marcacion = "Digital"  # Valor fijo por ahora
 
     if not ip or not puerto:
         messagebox.showwarning("Campos requeridos", "Por favor, ingresa la IP y el puerto del dispositivo.")
@@ -22,7 +25,11 @@ def descargar_asistencia():
         tree.delete(*tree.get_children())
         if registros:
             for usuario, fecha in registros:
-                tree.insert("", "end", values=(usuario, idDispositivo, fecha))
+                # dividir fecha en fecha y hora en el primer espacio
+                s = str(fecha)
+                fecha_str, _, hora_str = s.partition(' ')
+                # si no hay espacio, hora_str será '' automáticamente
+                tree.insert("", "end", values=(usuario, idDispositivo, tipo_marcacion, fecha_str, hora_str))
         else:
             messagebox.showinfo("Información", "No se encontraron registros")
     except Exception as e:
@@ -30,28 +37,47 @@ def descargar_asistencia():
 
 
 def exportar_excel():
-    # Crear libro y hoja
-    wb = openpyxl.Workbook()
-    ws = wb.active
-    ws.title = "Asistencias"
+    # Rellenar la plantilla existente en assets/Plantilla.xlsx (no crear archivo nuevo)
+    plantilla_path = os.path.join(os.path.dirname(__file__), "assets", "Plantilla.xlsx")
+    if not os.path.exists(plantilla_path):
+        messagebox.showerror("Plantilla no encontrada", f"No se encontró la plantilla en:\n{plantilla_path}")
+        return
 
-    # Escribir encabezados
-    ws.append(["Usuario", "Id_Bio", "Fecha-Hora"])
+    try:
+        wb = openpyxl.load_workbook(plantilla_path)
+        ws = wb.active
 
-    # Escribir filas del tree
-    for row_id in tree.get_children():
-        row = tree.item(row_id)['values']
-        ws.append(row)
+        # Limpiar filas existentes debajo del encabezado (suponiendo encabezado en la fila 1)
+        if ws.max_row >= 2:
+            for row in ws.iter_rows(min_row=2, max_row=ws.max_row):
+                for cell in row:
+                    cell.value = None
 
-    # Seleccionar ubicación y guardar
-    archivo = filedialog.asksaveasfilename(
-        defaultextension=".xlsx",
-        filetypes=[("Archivos Excel", "*.xlsx")],
-        title="Guardar como"
-    )
-    if archivo:
-        wb.save(archivo)
-        messagebox.showinfo("Éxito", f"Archivo guardado en:\n{archivo}")
+        # Volcar filas del tree (suponiendo que tree tiene 4 columnas: Usuario, Id_Bio, Fecha, Hora)
+        for row_id in tree.get_children():
+            row = tree.item(row_id)['values']
+            ws.append(row)
+        # Preguntar al usuario dónde guardar la copia (por defecto en carpeta assets)
+        ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+        base, ext = os.path.splitext(os.path.basename(plantilla_path))
+        default_name = f"{base}_{ts}{ext}"
+        initial_dir = os.path.dirname(plantilla_path)
+
+        archivo = filedialog.asksaveasfilename(
+            defaultextension=ext,
+            filetypes=[("Archivos Excel", "*.xlsx")],
+            initialdir=initial_dir,
+            initialfile=default_name,
+            title="Guardar copia de la plantilla como"
+        )
+
+        if archivo:
+            wb.save(archivo)
+            messagebox.showinfo("Éxito", f"Copia guardada en:\n{archivo}")
+        else:
+            messagebox.showinfo("Cancelado", "Guardado cancelado por el usuario.")
+    except Exception as e:
+        messagebox.showerror("Error al guardar", f"No se pudo actualizar la plantilla:\n{e}")
 
 
 #validacion solo puerto y idBiometrico
@@ -103,17 +129,21 @@ btn_exportar = tk.Button(root, text="Exportar a Excel", command=exportar_excel)
 btn_exportar.pack(pady=10)
 
 #tabla
-columns = ("Usuario", "Id_Bio", "Fecha-Hora")
+columns = ("Usuario", "Id_Bio", "Tipo_marcacion", "Fecha","Hora")
 frame_tabla = tk.Frame(root)
 frame_tabla.pack(fill="both", expand=True, padx=10, pady=10)
 
 tree = ttk.Treeview(frame_tabla, columns=columns, show="headings")
 tree.heading("Usuario", text="Usuario")
 tree.heading("Id_Bio", text="Id-Bio")
-tree.heading("Fecha-Hora", text="Fecha-Hora")
-tree.column("Usuario", width=200, anchor='w')
-tree.column("Id_Bio", width=50, minwidth=30, anchor='center', stretch=False)
-tree.column("Fecha-Hora", width=200, anchor='center')
+tree.heading("Tipo_marcacion", text="Tipo Marcacion")
+tree.heading("Fecha", text="Fecha")
+tree.heading("Hora", text="Hora")
+tree.column("Usuario", width=100, anchor='w')
+tree.column("Id_Bio", width=50, anchor='center', stretch=False)
+tree.column("Tipo_marcacion", width=50, anchor='center')
+tree.column("Fecha", width=100, anchor='center')
+tree.column("Hora", width=100, anchor='center')
 
 # Barra de desplazamiento vertical
 scrollbar_y = ttk.Scrollbar(frame_tabla, orient="vertical", command=tree.yview)
