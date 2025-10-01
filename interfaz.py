@@ -37,7 +37,7 @@ def descargar_asistencia():
 
 
 def exportar_excel():
-    # Rellenar la plantilla existente en assets/Plantilla.xlsx (no crear archivo nuevo)
+    # Rellena la plantilla existente en assets
     plantilla_path = os.path.join(os.path.dirname(__file__), "assets", "Plantilla.xlsx")
     if not os.path.exists(plantilla_path):
         messagebox.showerror("Plantilla no encontrada", f"No se encontró la plantilla en:\n{plantilla_path}")
@@ -110,6 +110,7 @@ frame_conexion.pack(pady=10)
 tk.Label(frame_conexion, text="IP del dispositivo:").grid(row=0, column=0, padx=5)
 entry_ip = tk.Entry(frame_conexion, validate="key", validatecommand=vcmd_ip)
 entry_ip.grid(row=0, column=1, padx=5)
+entry_ip.insert(0, "192.168.1.201")  # Valor por defecto
 
 tk.Label(frame_conexion, text="Puerto:").grid(row=1, column=0, padx=5)
 entry_puerto = tk.Entry(frame_conexion, validate="key", validatecommand=vcmd_puerto)
