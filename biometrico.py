@@ -2,8 +2,9 @@ from zk import ZK, const
 import inspect
 
 def obtener_asistencias(ip, puerto):
-
-    zk = ZK(ip, puerto, force_udp=False,timeout=3)
+    # Use UDP, skip the initial ping check and use a small socket timeout so
+    # connection attempts fail fast when the device is unreachable.
+    zk = ZK(ip, puerto, timeout=2, password=123456)
     registros = []
 
     try:
@@ -28,7 +29,8 @@ def obtener_asistencias(ip, puerto):
 
 def obtener_usuarios(ip, puerto):
 
-    zk = ZK(ip, puerto, timeout=5)
+    # shorter timeout and prefer UDP to avoid slow TCP checks
+    zk = ZK(ip, puerto, timeout=3, force_udp=False, ommit_ping=True)
     usuarios = []
 
     try:
@@ -50,7 +52,7 @@ def obtener_usuarios(ip, puerto):
 
 def set_time(ip, puerto):
 
-    zk = ZK(ip, puerto, timeout=5)
+    zk = ZK(ip, puerto, timeout=3, force_udp=False, ommit_ping=True)
 
     try:
         conn = zk.connect()
@@ -70,7 +72,7 @@ def set_time(ip, puerto):
 
 def get_info(ip, puerto):
 
-    zk = ZK(ip, puerto, timeout=5)
+    zk = ZK(ip, puerto, timeout=3, force_udp=False, ommit_ping=True)
 
     try:
         conn = zk.connect()
