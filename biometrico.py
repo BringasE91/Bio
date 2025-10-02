@@ -1,9 +1,9 @@
 from zk import ZK, const
-
+import inspect
 
 def obtener_asistencias(ip, puerto):
 
-    zk = ZK(ip, puerto, timeout=5)
+    zk = ZK(ip, puerto, force_udp=False,timeout=3)
     registros = []
 
     try:
@@ -11,6 +11,8 @@ def obtener_asistencias(ip, puerto):
         conn.disable_device()
 
         asistencias = conn.get_attendance()
+
+        print(inspect.signature(conn.get_attendance))
 
         for asistencia in asistencias:
             registros.append((asistencia.user_id, asistencia.timestamp))
