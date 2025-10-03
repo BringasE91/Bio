@@ -3,7 +3,7 @@ import inspect
 
 def obtener_asistencias(ip, puerto):
 
-    zk = ZK(ip, puerto, force_udp=False,timeout=3)
+    zk = ZK(ip, puerto, force_udp=False,timeout=5)
     registros = []
 
     try:
@@ -15,7 +15,7 @@ def obtener_asistencias(ip, puerto):
         print(inspect.signature(conn.get_attendance))
 
         for asistencia in asistencias:
-            registros.append((asistencia.user_id, asistencia.timestamp))
+            registros.append((asistencia.user_id, asistencia.timestamp, asistencia.status, asistencia.punch, asistencia.uid))
 
         conn.enable_device()
         conn.disconnect()
@@ -91,3 +91,21 @@ def get_info(ip, puerto):
         raise Exception(f"No se pudo conectar al biometrico: {e}")
     
     return info
+
+def eliminar_asistencias(ip, puerto):
+
+    zk = ZK(ip, puerto, timeout=5)
+
+    try:
+        conn = zk.connect()
+        conn.disable_device()
+
+        conn.clear_attendance()
+
+        conn.enable_device()
+        conn.disconnect()
+       
+    except Exception as e:
+        raise Exception(f"No se pudo conectar al biometrico: {e}")
+    
+    return True

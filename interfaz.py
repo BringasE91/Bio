@@ -1,12 +1,17 @@
 import tkinter as tk
 from tkinter import messagebox, ttk
 from biometrico import obtener_asistencias
+from biometrico import eliminar_asistencias
+from biometrico import get_info
+from biometrico import set_time 
 from tkinter import filedialog
 import openpyxl
 import os
 from datetime import datetime
 import sys
 import os
+
+exportar_usb_data = []
 
 def resource_path(*parts):
     """Devuelve la ruta absoluta a un recurso empaquetado (o en desarrollo)."""
@@ -31,7 +36,7 @@ def descargar_asistencia():
         registros = obtener_asistencias(ip, int(puerto))
         tree.delete(*tree.get_children())
         if registros:
-            for usuario, fecha in registros:
+            for usuario, fecha, status, punch, uid in registros:
                 # dividir fecha en fecha y hora en el primer espacio
                 s = str(fecha)
                 fecha_str, _, hora_str = s.partition(' ')
@@ -42,19 +47,57 @@ def descargar_asistencia():
                 hora_str = hora_str[:5]
                 # si no hay espacio, hora_str será '' automáticamente
                 tree.insert("", "end", values=(usuario, idDispositivo, tipo_marcacion, fecha_str, hora_str))
+                exportar_usb_data.append((usuario, s, idDispositivo, status, punch, 0))
         else:
             messagebox.showinfo("Información", "No se encontraron registros")
     except Exception as e:
         messagebox.showerror("Error", str(e)) 
 
+def exportar_usb():
+    if not exportar_usb_data:
+        messagebox.showinfo("Información", "No hay datos para exportar.")
+        return
+
+    # Preguntar al usuario dónde guardar el archivo, por defecto en carpeta escritorio
+    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+    default_name = f"{ts}_attlog.dat"    
+    initial_dir = os.path.join(os.path.expanduser("~"), "Desktop")
+    if not os.path.isdir(initial_dir):
+        initial_dir = os.path.expanduser("~")
+    # Abrir diálogo para guardar archivo, guardar como .dat o .txt
+    archivo = filedialog.asksaveasfilename(
+        defaultextension=".dat",
+        filetypes=[("Archivos de texto", "*.txt")],
+        initialfile=default_name,
+        initialdir=initial_dir,
+        title="Guardar archivo de exportación"
+    )
+
+    if archivo:
+        try:
+            with open(archivo, 'w') as f:
+                for registro in exportar_usb_data:
+                    #registros separados por tabulación
+                    linea = "\t".join(map(str, registro))
+                    f.write(linea + "\n")
+            messagebox.showinfo("Éxito", f"Datos exportados a:\n{archivo}")
+        except Exception as e:
+            messagebox.showerror("Error al guardar", f"No se pudo guardar el archivo:\n{e}")
+    else:
+        messagebox.showinfo("Cancelado", "Guardado cancelado por el usuario.")
 
 def exportar_excel():
+
+    if not tree.get_children():
+        messagebox.showinfo("Información", "No hay datos para exportar.")
+        return
+    
     # Rellena la plantilla existente en assets
     plantilla_path = resource_path("assets", "Plantilla.xlsx")
     if not os.path.exists(plantilla_path):
         messagebox.showerror("Plantilla no encontrada", f"No se encontró la plantilla en:\n{plantilla_path}")
         return
-
+    
     try:
         wb = openpyxl.load_workbook(plantilla_path)
         ws = wb.active
@@ -96,6 +139,55 @@ def exportar_excel():
     except Exception as e:
         messagebox.showerror("Error al guardar", f"No se pudo actualizar la plantilla:\n{e}")
 
+def eliminar_marcaciones():
+    ip = entry_ip.get().strip()
+    puerto = entry_puerto.get().strip()
+
+    try:
+        if not ip or not puerto:
+            messagebox.showwarning("Campos requeridos", "Por favor, ingresa la IP y el puerto del dispositivo.")
+            return
+
+        elif not tree.get_children():
+            messagebox.showinfo("Información", "No hay marcaciones para eliminar.")
+            return
+
+        else:
+            confirmacion = messagebox.askyesno("Confirmar", "¿Estás seguro de que deseas eliminar todas las marcaciones del dispositivo?")
+            if confirmacion:
+                eliminar_asistencias(ip, int(puerto))
+                tree.delete(*tree.get_children())
+            else:
+                messagebox.showinfo("Cancelado", "Eliminación cancelada.")
+                return
+            
+    except Exception as e:
+            messagebox.showerror("Error", f"No se pudo conectar al biométrico: {e}")
+
+def obtener_info():
+    ip = entry_ip.get().strip()
+    puerto = entry_puerto.get().strip()
+
+    if not ip or not puerto:
+        messagebox.showwarning("Campos requeridos", "Por favor, ingresa la IP y el puerto del dispositivo.")
+        return
+
+    try:
+        info = get_info(ip, int(puerto))
+        # Limpiar frame_info
+        for widget in frame_info.winfo_children():
+            widget.destroy()
+
+        if info:
+            fila = 0
+            for clave, valor in info.items():
+                tk.Label(frame_info, text=f"{clave.replace('_', ' ').title()}:").grid(row=fila, column=0, sticky="e", padx=5)
+                tk.Label(frame_info, text=valor).grid(row=fila, column=1, sticky="w", padx=5)
+                fila += 1
+        else:
+            messagebox.showinfo("Información", "No se pudo obtener la información del dispositivo.")
+    except Exception as e:
+        messagebox.showerror("Error", f"No se pudo conectar al biométrico: {e}")
 
 #validacion solo puerto
 def solo_puerto(char):
@@ -116,6 +208,46 @@ root = tk.Tk()
 root.title("SIGA Asistencias Biométrico")
 root.geometry("500x500")
 
+# Frame superior tipo barra de menú visual
+frame_menu_superior = tk.Frame(root)
+frame_menu_superior.pack(fill="x")
+
+# Subframe para los botones (con margen inferior)
+frame_botones_menu = tk.Frame(frame_menu_superior, bg="#e0e0e0")
+frame_botones_menu.pack(side="top", fill="x", pady=(0, 2))  # ← separación inferior
+
+# Estilo común para los botones
+boton_config = {
+    "bg": "#e0e0e0",
+    "activebackground": "#d4d4d4",
+    "bd": 0,
+    "relief": "solid",
+    "padx": 10,
+    "pady": 6
+}
+
+# Función para limpiar el frame
+def limpiar_frame_tabla():
+    for widget in frame_tabla.winfo_children():
+        widget.destroy()
+    for widget in frame_botones.winfo_children():
+        widget.destroy()
+
+# Lista de botones y sus comandos
+botones_menu = [
+    ("Información", limpiar_frame_tabla),
+    ("Asistencias", limpiar_frame_tabla),
+    ("Usuarios", limpiar_frame_tabla)
+]
+
+# Crear botones alineados horizontalmente
+for texto, comando in botones_menu:
+    btn = tk.Button(frame_botones_menu, text=texto, command=comando, **boton_config)
+    btn.pack(side="left", padx=1)
+
+
+
+# Validaciones de entrada
 vcmd_ip = (root.register(solo_ip), "%P")
 vcmd_puerto = (root.register(solo_puerto), "%P")
 vcmd_dispositivo = (root.register(solo_id_bio), "%P")
@@ -128,7 +260,7 @@ frame_conexion.pack(pady=10)
 tk.Label(frame_conexion, text="IP del dispositivo:").grid(row=0, column=0, padx=5)
 entry_ip = tk.Entry(frame_conexion, validate="key", validatecommand=vcmd_ip)
 entry_ip.grid(row=0, column=1, padx=5)
-entry_ip.insert(0, "192.168.1.167")  # Valor por defecto
+entry_ip.insert(0, "192.168.1.67")  # Valor por defecto
 
 tk.Label(frame_conexion, text="Puerto:").grid(row=1, column=0, padx=5)
 entry_puerto = tk.Entry(frame_conexion, validate="key", validatecommand=vcmd_puerto)
@@ -140,13 +272,13 @@ entry_id = tk.Entry(frame_conexion, validate="key", validatecommand=vcmd_disposi
 entry_id.grid(row=2, column=1, padx=5)
 entry_id.insert(0, "0")  # Valor por defecto
 
-#boton descargar asistencia
-btn_asistencia = tk.Button(root, text="Descargar asistencia", command=descargar_asistencia)
-btn_asistencia.pack(pady=10)
-
-#tabla asistencias frame
+#tabla contenido frame
 frame_tabla = tk.Frame(root)
 frame_tabla.pack(fill="both", expand=True, padx=10, pady=10)
+
+#boton descargar asistencia
+btn_asistencia = tk.Button(frame_tabla, text="Descargar asistencia", command=descargar_asistencia)
+btn_asistencia.pack(pady=10)
 
 #tabla asistencias
 columns = ("Usuario", "Id_Bio", "Tipo_marcacion", "Fecha","Hora")
@@ -168,8 +300,32 @@ tree.configure(yscrollcommand=scrollbar_y.set)
 scrollbar_y.pack(side="right", fill="y")
 tree.pack(side="left", fill="both", expand=True)
 
-#boton exportar a excel
-btn_exportar = tk.Button(root, text="Exportar a Excel", command=exportar_excel)
-btn_exportar.pack(pady=5)
+#botones exportar y eliminar
+frame_botones = tk.Frame(root, bg="#e0e0e0")
+frame_botones.pack( side="bottom", fill="both")
+
+# Subframe centrado para los botones
+contenedor_botones = tk.Frame(frame_botones, bg="#e0e0e0")
+contenedor_botones.pack(anchor="center", pady=5)
+
+btn_exportar = tk.Button(contenedor_botones, text="Exportar a Excel", command=exportar_excel)
+btn_exportar.pack(side="left", pady=5, padx=5)
+
+btn_exportar_usb = tk.Button(contenedor_botones, text="Exportar para USB", command=exportar_usb)
+btn_exportar_usb.pack(side="left", pady=5, padx=5)
+
+btn_eliminar_marcaciones = tk.Button(contenedor_botones, text="Eliminar marcaciones", command=eliminar_marcaciones)
+btn_eliminar_marcaciones.pack(side="left", pady=5, padx=5)
+
+#informacion del dispositivo
+"""
+frame_info = tk.Frame(root)
+frame_info.pack(pady=10)
+
+#boton obtener info y mostrar en frame_info
+btn_info = tk.Button(frame_botones, text="Obtener info dispositivo", command=obtener_info)
+btn_info.grid(row=0, column=3, padx=10)
+"""
+
 
 root.mainloop()
