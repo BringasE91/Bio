@@ -18,6 +18,8 @@ def resource_path(*parts):
     base = getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(__file__)))
     return os.path.join(base, *parts)
 
+# <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<< funciones >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+
 def descargar_asistencia():
     ip = entry_ip.get().strip()
     puerto = entry_puerto.get().strip()
@@ -174,34 +176,32 @@ def obtener_info():
 
     try:
         info = get_info(ip, int(puerto))
-        # Limpiar frame_info
-        for widget in frame_info.winfo_children():
-            widget.destroy()
-
+       
         if info:
             fila = 0
             for clave, valor in info.items():
-                tk.Label(frame_info, text=f"{clave.replace('_', ' ').title()}:").grid(row=fila, column=0, sticky="e", padx=5)
-                tk.Label(frame_info, text=valor).grid(row=fila, column=1, sticky="w", padx=5)
+                tk.Label(frame_detalle_info, text=f"{clave.replace('_', ' ').title()}:").grid(row=fila, column=0, sticky="e", padx=5)
+                tk.Label(frame_detalle_info, text=valor).grid(row=fila, column=1, sticky="w", padx=5)
                 fila += 1
         else:
             messagebox.showinfo("Información", "No se pudo obtener la información del dispositivo.")
     except Exception as e:
         messagebox.showerror("Error", f"No se pudo conectar al biométrico: {e}")
 
-#validacion solo puerto
-def solo_puerto(char):
-    return (char.isdigit() or char == "") and len(char) <= 5
+def mostrar_frame_info():
+    if frame_tabla.winfo_ismapped():
+        frame_tabla.pack_forget()
+    frame_info.pack(fill="both", expand=True, padx=10, pady=10)
 
-#validacion IP
-def solo_ip(char):
-    # Permite solo dígitos, puntos o vacío
-    return all(c.isdigit() or c == '.' for c in char) or char == ""
+def mostrar_frame_tabla():
+    if frame_info.winfo_ismapped():
+        frame_info.pack_forget()
+    frame_tabla.pack(fill="both", expand=True, padx=10, pady=10)
 
-#validacion solo idBiometrico
-def solo_id_bio(char):
-    return (char.isdigit() or char == "") and len(char) <= 3
 
+
+
+#<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<< interfaz gráfica >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
 
 #ventana principal
 root = tk.Tk()
@@ -226,33 +226,30 @@ boton_config = {
     "pady": 6
 }
 
-# Función para limpiar el frame
-def limpiar_frame_tabla():
-    for widget in frame_tabla.winfo_children():
-        widget.destroy()
-    for widget in frame_botones.winfo_children():
-        widget.destroy()
+#<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<< validaciones entradas >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
 
-# Lista de botones y sus comandos
-botones_menu = [
-    ("Información", limpiar_frame_tabla),
-    ("Asistencias", limpiar_frame_tabla),
-    ("Usuarios", limpiar_frame_tabla)
-]
+#validacion solo puerto
+def solo_puerto(char):
+    return (char.isdigit() or char == "") and len(char) <= 5
 
-# Crear botones alineados horizontalmente
-for texto, comando in botones_menu:
-    btn = tk.Button(frame_botones_menu, text=texto, command=comando, **boton_config)
-    btn.pack(side="left", padx=1)
+#validacion IP
+def solo_ip(char):
+    # Permite solo dígitos, puntos o vacío
+    return all(c.isdigit() or c == '.' for c in char) or char == ""
 
-
+#validacion solo idBiometrico
+def solo_id_bio(char):
+    return (char.isdigit() or char == "") and len(char) <= 3
 
 # Validaciones de entrada
 vcmd_ip = (root.register(solo_ip), "%P")
 vcmd_puerto = (root.register(solo_puerto), "%P")
 vcmd_dispositivo = (root.register(solo_id_bio), "%P")
 
-# frame para el IP , puerto y id dispositivo
+
+# <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<  conexion >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+
+#frame conexion
 frame_conexion = tk.Frame(root)
 frame_conexion.pack(pady=10)
 
@@ -272,17 +269,21 @@ entry_id = tk.Entry(frame_conexion, validate="key", validatecommand=vcmd_disposi
 entry_id.grid(row=2, column=1, padx=5)
 entry_id.insert(0, "0")  # Valor por defecto
 
-#tabla contenido frame
+#<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<< tabla asistencias >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+
+#frame tabla asistencias
 frame_tabla = tk.Frame(root)
 frame_tabla.pack(fill="both", expand=True, padx=10, pady=10)
 
-#boton descargar asistencia
+#boton descargar asistencias
 btn_asistencia = tk.Button(frame_tabla, text="Descargar asistencia", command=descargar_asistencia)
 btn_asistencia.pack(pady=10)
 
 #tabla asistencias
+frame_tabla_inner = tk.Frame(frame_tabla)
+frame_tabla_inner.pack(fill="both", expand=True)
 columns = ("Usuario", "Id_Bio", "Tipo_marcacion", "Fecha","Hora")
-tree = ttk.Treeview(frame_tabla, columns=columns, show="headings")
+tree = ttk.Treeview(frame_tabla_inner, columns=columns, show="headings")
 tree.heading("Usuario", text="Id usuario")
 tree.heading("Id_Bio", text="Id Bio")
 tree.heading("Tipo_marcacion", text="Tipo Marcacion")
@@ -295,13 +296,13 @@ tree.column("Fecha", width=70, anchor='center')
 tree.column("Hora", width=70, anchor='center')
 
 # Barra de desplazamiento vertical de la tabla asistencias
-scrollbar_y = ttk.Scrollbar(frame_tabla, orient="vertical", command=tree.yview)
+scrollbar_y = ttk.Scrollbar(frame_tabla_inner, orient="vertical", command=tree.yview)
 tree.configure(yscrollcommand=scrollbar_y.set)
 scrollbar_y.pack(side="right", fill="y")
 tree.pack(side="left", fill="both", expand=True)
 
 #botones exportar y eliminar
-frame_botones = tk.Frame(root, bg="#e0e0e0")
+frame_botones = tk.Frame(frame_tabla, bg="#e0e0e0")
 frame_botones.pack( side="bottom", fill="both")
 
 # Subframe centrado para los botones
@@ -317,15 +318,37 @@ btn_exportar_usb.pack(side="left", pady=5, padx=5)
 btn_eliminar_marcaciones = tk.Button(contenedor_botones, text="Eliminar marcaciones", command=eliminar_marcaciones)
 btn_eliminar_marcaciones.pack(side="left", pady=5, padx=5)
 
+#<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<< informacion dispositivo >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+
 #informacion del dispositivo
-"""
 frame_info = tk.Frame(root)
-frame_info.pack(pady=10)
+frame_info.pack_forget()  # Se muestra al hacer clic en el botón correspondiente
 
 #boton obtener info y mostrar en frame_info
-btn_info = tk.Button(frame_botones, text="Obtener info dispositivo", command=obtener_info)
-btn_info.grid(row=0, column=3, padx=10)
-"""
+btn_info = tk.Button(frame_info, text="Obtener info dispositivo", command=obtener_info)
+btn_info.pack(pady=5)
+
+#subframe para mostrar info
+frame_detalle_info = tk.Frame(frame_info,bg="#f0f0f0", bd=1, relief="solid")   
+frame_detalle_info.pack(pady=10, fill="both", expand=True)
+
+#<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<< barra de menu superior >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+
+# Lista de botones y sus comandos
+botones_menu = [
+    ("Información", mostrar_frame_info),
+    ("Asistencias", mostrar_frame_tabla),
+    ("Usuarios", mostrar_frame_tabla)
+]
+
+# Crear botones alineados horizontalmente
+for texto, comando in botones_menu:
+    btn = tk.Button(frame_botones_menu, text=texto, command=comando, **boton_config)
+    btn.pack(side="left", padx=1)
 
 
+  # Mostrar el frame de info al iniciar
 root.mainloop()
+
+# Para crear el ejecutable con PyInstaller, usar el siguiente comando en la terminal:
+# pyinstaller --onefile --add-data "assets;assets" --noconsole interfaz.py
