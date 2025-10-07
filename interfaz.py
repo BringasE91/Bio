@@ -1,9 +1,13 @@
 import tkinter as tk
-from tkinter import messagebox, ttk
+from tkinter import messagebox
+import ttkbootstrap as ttk
+from ttkbootstrap.constants import *
 from biometrico import obtener_asistencias
 from biometrico import eliminar_asistencias
 from biometrico import get_info
-from biometrico import set_time 
+from biometrico import set_time
+from biometrico import get_usuarios
+from ttkbootstrap.scrolled import ScrolledFrame
 from tkinter import filedialog
 import openpyxl
 import os
@@ -37,8 +41,10 @@ def descargar_asistencia():
     try:
         registros = obtener_asistencias(ip, int(puerto))
         tree.delete(*tree.get_children())
+        exportar_usb_data.clear()
+        contador = 0
         if registros:
-            for usuario, fecha, status, punch, uid in registros:
+            for uid, usuario, fecha, status, punch in registros:
                 # dividir fecha en fecha y hora en el primer espacio
                 s = str(fecha)
                 fecha_str, _, hora_str = s.partition(' ')
@@ -48,10 +54,16 @@ def descargar_asistencia():
                 # quitar segundos de hora
                 hora_str = hora_str[:5]
                 # si no hay espacio, hora_str será '' automáticamente
+                contador += 1
                 tree.insert("", "end", values=(usuario, idDispositivo, tipo_marcacion, fecha_str, hora_str))
                 exportar_usb_data.append((usuario, s, idDispositivo, status, punch, 0))
+                
         else:
             messagebox.showinfo("Información", "No se encontraron registros")
+        if contador == 1:  
+            messagebox.showinfo("Éxito", f"Se halló {contador} registro.")
+        else:
+            messagebox.showinfo("Éxito", f"Se hallaron {contador} registros.")
     except Exception as e:
         messagebox.showerror("Error", str(e)) 
 
@@ -155,7 +167,7 @@ def eliminar_marcaciones():
             return
 
         else:
-            confirmacion = messagebox.askyesno("Confirmar", "¿Estás seguro de que deseas eliminar todas las marcaciones del dispositivo?")
+            confirmacion = messagebox.askyesno("Confirmar", "¿Estás seguro de que deseas eliminar todas las marcaciones del dispositivo?", icon='warning', default='no')
             if confirmacion:
                 eliminar_asistencias(ip, int(puerto))
                 tree.delete(*tree.get_children())
@@ -178,53 +190,123 @@ def obtener_info():
         info = get_info(ip, int(puerto))
        
         if info:
+            #limpiar scrollabe_frame_info
+            for widget in frame_detalle_info.winfo_children():
+                widget.destroy()
+
+            #subframe para centrar en frame_detalle_info
+            frame_centrar_info = ttk.Frame(frame_detalle_info)
+            frame_centrar_info.pack(anchor="center", pady=10)
+
+            
             fila = 0
             for clave, valor in info.items():
-                tk.Label(frame_detalle_info, text=f"{clave.replace('_', ' ').title()}:").grid(row=fila, column=0, sticky="e", padx=5)
-                tk.Label(frame_detalle_info, text=valor).grid(row=fila, column=1, sticky="w", padx=5)
+                ttk.Label(
+                    frame_centrar_info,
+                    text=f"{clave.replace('_', ' ').title()}:",
+                    anchor="w",    # Centra el texto dentro de la celda
+                    justify="left",  #
+                    bootstyle="secondary"  # opcional: estilo sutil con ttkbootstrap
+                ).grid(row=fila, column=0, padx=10, pady=4, sticky="nsew")
+
+                ttk.Label(
+                    frame_centrar_info,
+                    text=str(valor),
+                    anchor="w",    # Centra el texto dentro de la celda
+                    justify="left",
+                    bootstyle="info"  # opcional: color de texto más visible
+                ).grid(row=fila, column=1, padx=10, pady=4, sticky="nsew")
+
                 fila += 1
+
+
         else:
             messagebox.showinfo("Información", "No se pudo obtener la información del dispositivo.")
     except Exception as e:
         messagebox.showerror("Error", f"No se pudo conectar al biométrico: {e}")
 
+
+def obtener_usuarios():
+    ip = entry_ip.get().strip()
+    puerto = entry_puerto.get().strip()
+
+    if not ip or not puerto:
+        messagebox.showwarning("Campos requeridos", "Por favor, ingresa la IP y el puerto del dispositivo.")
+        return
+
+    try:
+        usuarios = get_usuarios(ip, int(puerto))
+        tree_usuarios.delete(*tree_usuarios.get_children())
+        contador = 0
+        if usuarios:
+            for usuario in usuarios:
+                #ocultar password si no está marcado el checkbutton
+                if not var_mostrar_password.get():
+                    usuario = list(usuario)
+                    usuario[3] = "*" * len(usuario[3])
+                    usuario = tuple(usuario)
+                tree_usuarios.insert("", "end", values=usuario)
+                contador += 1
+        else:
+            messagebox.showinfo("Información", "No se encontraron usuarios")
+        if contador == 1:  
+            messagebox.showinfo("Éxito", f"Se halló {contador} usuario.")
+        else:
+            messagebox.showinfo("Éxito", f"Se hallaron {contador} usuarios.")
+    except Exception as e:
+        messagebox.showerror("Error", f"No se pudo conectar al biométrico: {e}")
+
+def sincronizar_hora():
+    ip = entry_ip.get().strip()
+    puerto = entry_puerto.get().strip()
+
+    if not ip or not puerto:
+        messagebox.showwarning("Campos requeridos", "Por favor, ingresa la IP y el puerto del dispositivo.")
+        return
+
+    try:
+        exito = set_time(ip, int(puerto))
+        if exito:
+            messagebox.showinfo("Éxito", "Hora sincronizada con éxito.")
+        else:
+            messagebox.showinfo("Información", "No se pudo sincronizar la hora.")
+    except Exception as e:
+        messagebox.showerror("Error", f"No se pudo conectar al biométrico: {e}")
+
 def mostrar_frame_info():
-    if frame_tabla.winfo_ismapped():
-        frame_tabla.pack_forget()
+    if frame_asistencias.winfo_ismapped() or frame_usuarios:
+        frame_asistencias.pack_forget()
+        frame_usuarios.pack_forget()
     frame_info.pack(fill="both", expand=True, padx=10, pady=10)
 
-def mostrar_frame_tabla():
-    if frame_info.winfo_ismapped():
+def mostrar_frame_asistencias():
+    if frame_info.winfo_ismapped() or frame_usuarios.winfo_ismapped():
         frame_info.pack_forget()
-    frame_tabla.pack(fill="both", expand=True, padx=10, pady=10)
+        frame_usuarios.pack_forget()
+    frame_asistencias.pack(fill="both", expand=True, padx=10, pady=10)
 
-
-
+def mostrar_frame_usuarios():
+    if frame_info.winfo_ismapped() or frame_asistencias.winfo_ismapped():
+        frame_info.pack_forget()
+        frame_asistencias.pack_forget()
+    frame_usuarios.pack(fill="both", expand=True, padx=10, pady=10)
 
 #<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<< interfaz gráfica >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
 
-#ventana principal
-root = tk.Tk()
-root.title("SIGA Asistencias Biométrico")
-root.geometry("500x500")
+root = ttk.Window(
+    title="SIGA Asistencias Biométrico",
+    themename="flatly",     # puedes cambiar: cosmo, darkly, cyborg, pulse, etc.
+    size=(600, 500),        
+    resizable=(False, False) # ventana no redimensionable
+)
 
 # Frame superior tipo barra de menú visual
-frame_menu_superior = tk.Frame(root)
+frame_menu_superior = ttk.Frame(root)
 frame_menu_superior.pack(fill="x")
 
 # Subframe para los botones (con margen inferior)
-frame_botones_menu = tk.Frame(frame_menu_superior, bg="#e0e0e0")
+frame_botones_menu = ttk.Frame(frame_menu_superior)
 frame_botones_menu.pack(side="top", fill="x", pady=(0, 2))  # ← separación inferior
-
-# Estilo común para los botones
-boton_config = {
-    "bg": "#e0e0e0",
-    "activebackground": "#d4d4d4",
-    "bd": 0,
-    "relief": "solid",
-    "padx": 10,
-    "pady": 6
-}
 
 #<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<< validaciones entradas >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
 
@@ -250,45 +332,48 @@ vcmd_dispositivo = (root.register(solo_id_bio), "%P")
 # <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<  conexion >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
 
 #frame conexion
-frame_conexion = tk.Frame(root)
+frame_conexion = ttk.Frame(root)
 frame_conexion.pack(pady=10)
 
 #etiquetas y entradas
-tk.Label(frame_conexion, text="IP del dispositivo:").grid(row=0, column=0, padx=5)
-entry_ip = tk.Entry(frame_conexion, validate="key", validatecommand=vcmd_ip)
+ttk.Label(frame_conexion, text="IP del dispositivo:").grid(row=0, column=0, padx=5)
+entry_ip = ttk.Entry(frame_conexion, validate="key", validatecommand=vcmd_ip)
 entry_ip.grid(row=0, column=1, padx=5)
 entry_ip.insert(0, "192.168.1.67")  # Valor por defecto
 
-tk.Label(frame_conexion, text="Puerto:").grid(row=1, column=0, padx=5)
-entry_puerto = tk.Entry(frame_conexion, validate="key", validatecommand=vcmd_puerto)
+ttk.Label(frame_conexion, text="Puerto:").grid(row=1, column=0, padx=5)
+entry_puerto = ttk.Entry(frame_conexion, validate="key", validatecommand=vcmd_puerto)
 entry_puerto.grid(row=1, column=1, padx=5)
 entry_puerto.insert(0, "4370")  # Valor por defecto
 
-tk.Label(frame_conexion, text="Id dispositivo:").grid(row=2, column=0, padx=5)
-entry_id = tk.Entry(frame_conexion, validate="key", validatecommand=vcmd_dispositivo)
+ttk.Label(frame_conexion, text="Id dispositivo:").grid(row=2, column=0, padx=5)
+entry_id = ttk.Entry(frame_conexion, validate="key", validatecommand=vcmd_dispositivo)
 entry_id.grid(row=2, column=1, padx=5)
 entry_id.insert(0, "0")  # Valor por defecto
 
 #<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<< tabla asistencias >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
 
 #frame tabla asistencias
-frame_tabla = tk.Frame(root)
-frame_tabla.pack(fill="both", expand=True, padx=10, pady=10)
+frame_asistencias = ttk.Frame(root)
+frame_asistencias.pack(fill="both", expand=True, padx=10, pady=10)
 
 #boton descargar asistencias
-btn_asistencia = tk.Button(frame_tabla, text="Descargar asistencia", command=descargar_asistencia)
+btn_asistencia = ttk.Button(frame_asistencias, text="Descargar asistencia", command=descargar_asistencia)
 btn_asistencia.pack(pady=10)
 
 #tabla asistencias
-frame_tabla_inner = tk.Frame(frame_tabla)
+frame_tabla_inner = ttk.Frame(frame_asistencias)
 frame_tabla_inner.pack(fill="both", expand=True)
 columns = ("Usuario", "Id_Bio", "Tipo_marcacion", "Fecha","Hora")
 tree = ttk.Treeview(frame_tabla_inner, columns=columns, show="headings")
+#tree.heading("#", text="#")
 tree.heading("Usuario", text="Id usuario")
 tree.heading("Id_Bio", text="Id Bio")
 tree.heading("Tipo_marcacion", text="Tipo Marcacion")
 tree.heading("Fecha", text="Fecha")
 tree.heading("Hora", text="Hora")
+
+#tree.column("#", width=30, anchor='center')
 tree.column("Usuario", width=100, anchor='center')
 tree.column("Id_Bio", width=70, anchor='center')
 tree.column("Tipo_marcacion", width=100, anchor='center')
@@ -302,48 +387,112 @@ scrollbar_y.pack(side="right", fill="y")
 tree.pack(side="left", fill="both", expand=True)
 
 #botones exportar y eliminar
-frame_botones = tk.Frame(frame_tabla, bg="#e0e0e0")
+frame_botones = ttk.Frame(frame_asistencias)
 frame_botones.pack( side="bottom", fill="both")
 
 # Subframe centrado para los botones
-contenedor_botones = tk.Frame(frame_botones, bg="#e0e0e0")
+contenedor_botones = ttk.Frame(frame_botones)
 contenedor_botones.pack(anchor="center", pady=5)
 
-btn_exportar = tk.Button(contenedor_botones, text="Exportar a Excel", command=exportar_excel)
+btn_exportar = ttk.Button(contenedor_botones, text="Exportar a Excel", command=exportar_excel)
 btn_exportar.pack(side="left", pady=5, padx=5)
 
-btn_exportar_usb = tk.Button(contenedor_botones, text="Exportar para USB", command=exportar_usb)
+btn_exportar_usb = ttk.Button(contenedor_botones, text="Exportar para USB", command=exportar_usb)
 btn_exportar_usb.pack(side="left", pady=5, padx=5)
 
-btn_eliminar_marcaciones = tk.Button(contenedor_botones, text="Eliminar marcaciones", command=eliminar_marcaciones)
+btn_eliminar_marcaciones = ttk.Button(
+    contenedor_botones, 
+    text="Eliminar marcaciones ⚠️", 
+    command=eliminar_marcaciones, 
+    bootstyle="danger",
+    )
 btn_eliminar_marcaciones.pack(side="left", pady=5, padx=5)
 
 #<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<< informacion dispositivo >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
 
 #informacion del dispositivo
-frame_info = tk.Frame(root)
+frame_info = ttk.Frame(root)
 frame_info.pack_forget()  # Se muestra al hacer clic en el botón correspondiente
 
 #boton obtener info y mostrar en frame_info
-btn_info = tk.Button(frame_info, text="Obtener info dispositivo", command=obtener_info)
+btn_info = ttk.Button(frame_info, text="Obtener info dispositivo", command=obtener_info)
 btn_info.pack(pady=5)
 
 #subframe para mostrar info
-frame_detalle_info = tk.Frame(frame_info,bg="#f0f0f0", bd=1, relief="solid")   
+frame_detalle_info = ScrolledFrame(frame_info)   
 frame_detalle_info.pack(pady=10, fill="both", expand=True)
+
+#sincronizar hora
+btn_sincronizar_hora = ttk.Button(frame_info, text="Sincronizar hora Peru ⏱️", command=sincronizar_hora)
+btn_sincronizar_hora.pack(pady=5)
+
+#<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<< usuarios >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+#frame usuarios
+frame_usuarios = ttk.Frame(root)
+frame_usuarios.pack_forget()  # Se muestra al hacer clic en el botón correspondiente
+
+#boton obtener usuarios
+btn_usuarios = ttk.Button(frame_usuarios, text="Obtener usuarios", command=obtener_usuarios)
+btn_usuarios.pack(side="top",pady=2)
+
+#checkbutton mostrar contraseñas
+var_mostrar_password = ttk.BooleanVar(value=False)
+check_password = ttk.Checkbutton(frame_usuarios, text="Mostrar contraseñas", variable=var_mostrar_password)
+check_password.pack(side="top", pady=3)   
+
+#tabla usuarios
+frame_tabla_usuarios = ttk.Frame(frame_usuarios)
+frame_tabla_usuarios.pack(fill="both", expand=True, padx=10, pady=5)
+columns_usuarios = ("Id usuario", "Nombre", "Privilegio", "Password", "Tarjeta") 
+tree_usuarios = ttk.Treeview(frame_tabla_usuarios, columns=columns_usuarios, show="headings")
+#tree_usuarios.heading("#", text="#")
+tree_usuarios.heading("Id usuario", text="Id usuario")
+tree_usuarios.heading("Nombre", text="Nombre")
+tree_usuarios.heading("Privilegio", text="Privilegio")
+tree_usuarios.heading("Password", text="Password")  
+tree_usuarios.heading("Tarjeta", text="Tarjeta")
+
+#tree_usuarios.column("#", width=30, anchor='center')
+tree_usuarios.column("Id usuario", width=80, anchor='center')
+tree_usuarios.column("Nombre", width=130, anchor='w')
+tree_usuarios.column("Privilegio", width=50, anchor='center')
+tree_usuarios.column("Password", width=80, anchor='center')
+tree_usuarios.column("Tarjeta", width=80, anchor='center')
+
+#sidebar vertical
+scrollbar_y_usuarios = ttk.Scrollbar(frame_tabla_usuarios, orient="vertical", command=tree_usuarios.yview)
+tree_usuarios.configure(yscrollcommand=scrollbar_y_usuarios.set)    
+scrollbar_y_usuarios.pack(side="right", fill="y")
+tree_usuarios.pack(side="left", fill="both", expand=True)
+
+# botones opciones usuarios
+frame_botones_usuarios = ttk.Frame(frame_usuarios)
+frame_botones_usuarios.pack( side="bottom", fill="both")
+
+contenedor_botones_usuarios = ttk.Frame(frame_botones_usuarios)
+contenedor_botones_usuarios.pack(anchor="center", pady=5)
+
+btn_agregar_usuarios = ttk.Button(contenedor_botones_usuarios, text="Agregar usuario", command=exportar_usb)
+btn_agregar_usuarios.pack(side="left", pady=5, padx=5)
+
+btn_exportar_usuarios = ttk.Button(contenedor_botones_usuarios, text="Exportar usuario", command=exportar_usb)
+btn_exportar_usuarios.pack(side="left", pady=5, padx=5)
+
+btn_eliminar_usuarios = ttk.Button(contenedor_botones_usuarios, text="Eliminar usuario", command=exportar_excel)
+btn_eliminar_usuarios.pack(side="left", pady=5, padx=5)
 
 #<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<< barra de menu superior >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
 
 # Lista de botones y sus comandos
 botones_menu = [
     ("Información", mostrar_frame_info),
-    ("Asistencias", mostrar_frame_tabla),
-    ("Usuarios", mostrar_frame_tabla)
+    ("Asistencias", mostrar_frame_asistencias),
+    ("Usuarios", mostrar_frame_usuarios)
 ]
 
 # Crear botones alineados horizontalmente
 for texto, comando in botones_menu:
-    btn = tk.Button(frame_botones_menu, text=texto, command=comando, **boton_config)
+    btn = ttk.Button(frame_botones_menu, text=texto, command=comando)
     btn.pack(side="left", padx=1)
 
 

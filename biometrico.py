@@ -1,5 +1,17 @@
 from zk import ZK, const
-import inspect
+from datetime import datetime, timedelta, timezone
+import ntplib
+
+
+def get_ntp_time():
+    """Intenta obtener la hora actual desde un servidor NTP (UTC)."""
+    try:
+        client = ntplib.NTPClient()
+        response = client.request('pool.ntp.org', version=3)
+        return datetime.fromtimestamp(response.tx_time, timezone.utc)
+    except Exception:
+        return None
+
 
 def obtener_asistencias(ip, puerto):
 
@@ -12,10 +24,10 @@ def obtener_asistencias(ip, puerto):
 
         asistencias = conn.get_attendance()
 
-        print(inspect.signature(conn.get_attendance))
+        #print(inspect.signature(conn.get_attendance))
 
         for asistencia in asistencias:
-            registros.append((asistencia.user_id, asistencia.timestamp, asistencia.status, asistencia.punch, asistencia.uid))
+            registros.append((asistencia.uid, asistencia.user_id, asistencia.timestamp, asistencia.status, asistencia.punch))
 
         conn.enable_device()
         conn.disconnect()
@@ -26,7 +38,7 @@ def obtener_asistencias(ip, puerto):
     return registros
 
 
-def obtener_usuarios(ip, puerto):
+def get_usuarios(ip, puerto):
 
     # shorter timeout and prefer UDP to avoid slow TCP checks
     zk = ZK(ip, puerto, timeout=3, force_udp=False, ommit_ping=True)
@@ -39,7 +51,11 @@ def obtener_usuarios(ip, puerto):
         usuarios_bio = conn.get_users()
 
         for usuario in usuarios_bio:
-            usuarios.append((usuario.user_id, usuario.name))
+            if usuario.name[:3] == "NN-":
+                nombre = ""
+            else:
+                nombre = usuario.name
+            usuarios.append((usuario.user_id, nombre, usuario.privilege, usuario.password, usuario.card))
 
         conn.enable_device()
         conn.disconnect()
@@ -56,11 +72,20 @@ def set_time(ip, puerto):
     try:
         conn = zk.connect()
         conn.disable_device()
+        #obtenemos hora de internet
+        ahora = get_ntp_time()
+        #ajustamos a hora de peru
+        ahora_peru = ahora.astimezone(timezone(timedelta(hours=-5)))
 
-        from datetime import datetime
-        now = datetime.now()
-        conn.set_time(now)
+        #debug
+        #print("Hora obtenida de internet:", ahora_peru)
+        #print("Hora local del sistema:", datetime.now())
 
+        #si no se pudo obtener la hora de internet, usamos la hora local del sistema 
+        if not ahora_peru:      
+            ahora_peru = datetime.now()
+        #seteamos la hora en el biometrico
+        conn.set_time(ahora_peru)
         conn.enable_device()
         conn.disconnect()
        
@@ -69,6 +94,7 @@ def set_time(ip, puerto):
     
     return True
 
+
 def get_info(ip, puerto):
 
     zk = ZK(ip, puerto, timeout=3, force_udp=False, ommit_ping=True)
@@ -76,13 +102,24 @@ def get_info(ip, puerto):
     try:
         conn = zk.connect()
         conn.disable_device()
-
+        conn.read_sizes()
         info = {
-            "device_name": conn.get_device_name(),
-            "serial_number": conn.get_serialnumber(),
+            "nombre_dispositivo": conn.get_device_name(),
+            "numero_de_serie": conn.get_serialnumber(),
             "firmware_version": conn.get_firmware_version(),
-            "platform": conn.get_platform(),
-            "mac": conn.get_mac()
+            "platforma": conn.get_platform(),
+            "MAC": conn.get_mac(),
+            "tiempo": conn.get_time(),
+            "face_version": f"ZKFace VX{conn.get_face_version()}",
+            "fp_version": f"ZKFinger VX{conn.get_fp_version()}",
+            "cant_usuarios": conn.users,
+            "cant_usuarios_max": conn.users_cap,
+            "cant_huellas": conn.fingers,
+            "cant_huellas_max": conn.fingers_cap,
+            "cant_rostros": conn.faces,
+            "cant_rostros_max": conn.faces_cap,
+            "cant_asistencias": conn.records,
+            "cant_asistencias_max": conn.rec_cap
         }
 
         conn.enable_device()
