@@ -88,11 +88,10 @@ def set_time(ip, puerto):
         conn.set_time(ahora_peru)
         conn.enable_device()
         conn.disconnect()
-       
+        return True
     except Exception as e:
         raise Exception(f"No se pudo conectar al biometrico: {e}")
     
-    return True
 
 
 def get_info(ip, puerto):
@@ -109,7 +108,7 @@ def get_info(ip, puerto):
             "firmware_version": conn.get_firmware_version(),
             "platforma": conn.get_platform(),
             "MAC": conn.get_mac(),
-            "tiempo": conn.get_time(),
+            "fecha_hora": conn.get_time(),
             "face_version": f"ZKFace VX{conn.get_face_version()}",
             "fp_version": f"ZKFinger VX{conn.get_fp_version()}",
             "cant_usuarios": conn.users,
@@ -147,3 +146,38 @@ def eliminar_asistencias(ip, puerto):
         raise Exception(f"No se pudo conectar al biometrico: {e}")
     
     return True
+
+def delete_users(ip, puerto, users):
+    zk = ZK(ip, puerto, timeout=3, force_udp=False, ommit_ping=True)
+
+    try:
+        conn = zk.connect()
+        if not conn:
+            return False
+
+        conn.disable_device()
+
+        # Verificar lista vacía
+        if not users:
+            conn.enable_device()
+            conn.disconnect()
+            return False
+
+        # Aseguramos que sea tupla
+        users = tuple(users)
+
+        # Eliminamos cada usuario
+        for user in users:
+            conn.delete_user(user_id=user)
+
+        conn.enable_device()
+        conn.disconnect()
+        return True
+
+    except Exception as e:
+        print(f"[Error delete_users] {e}")
+        return False
+
+
+    
+

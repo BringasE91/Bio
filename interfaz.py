@@ -7,6 +7,7 @@ from biometrico import eliminar_asistencias
 from biometrico import get_info
 from biometrico import set_time
 from biometrico import get_usuarios
+from biometrico import delete_users
 from ttkbootstrap.scrolled import ScrolledFrame
 from tkinter import filedialog
 import openpyxl
@@ -16,6 +17,7 @@ import sys
 import os
 
 exportar_usb_data = []
+usuarios_seleccionados = []
 
 def resource_path(*parts):
     """Devuelve la ruta absoluta a un recurso empaquetado (o en desarrollo)."""
@@ -24,25 +26,37 @@ def resource_path(*parts):
 
 # <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<< funciones >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
 
-def descargar_asistencia():
+def datos_conexion():
     ip = entry_ip.get().strip()
     puerto = entry_puerto.get().strip()
-    idDispositivo = entry_id.get().strip()
-    # convertir idDispositivo a int si es numérico
-    if idDispositivo.isdigit():
-        idDispositivo = int(idDispositivo)
-    elif idDispositivo == "":
-        idDispositivo = 0
-    tipo_marcacion = 1  # Valor fijo por ahora
-
+    
     if not ip or not puerto:
         messagebox.showwarning("Campos requeridos", "Por favor, ingresa la IP y el puerto del dispositivo.")
-        return
+        return None
+    else:
+        return ip, int(puerto)
+
+def descargar_asistencia():
+   
     try:
-        registros = obtener_asistencias(ip, int(puerto))
-        tree.delete(*tree.get_children())
-        exportar_usb_data.clear()
+        idDispositivo = entry_id.get().strip()
+        # convertir idDispositivo a int si es numérico
+        if idDispositivo.isdigit():
+            idDispositivo = int(idDispositivo)
+        elif idDispositivo == "":
+            idDispositivo = 0
+        tipo_marcacion = 1  # Valor fijo por ahora
+        conexion = datos_conexion()
         contador = 0
+
+        if conexion:
+            registros = obtener_asistencias(*conexion)
+            tree.delete(*tree.get_children())
+            exportar_usb_data.clear()
+            
+        else:
+            return
+        
         if registros:
             for uid, usuario, fecha, status, punch in registros:
                 # dividir fecha en fecha y hora en el primer espacio
@@ -154,22 +168,17 @@ def exportar_excel():
         messagebox.showerror("Error al guardar", f"No se pudo actualizar la plantilla:\n{e}")
 
 def eliminar_marcaciones():
-    ip = entry_ip.get().strip()
-    puerto = entry_puerto.get().strip()
-
     try:
-        if not ip or not puerto:
-            messagebox.showwarning("Campos requeridos", "Por favor, ingresa la IP y el puerto del dispositivo.")
+        conexion = datos_conexion()
+        if not conexion: 
             return
-
-        elif not tree.get_children():
+        if not tree.get_children():
             messagebox.showinfo("Información", "No hay marcaciones para eliminar.")
             return
-
         else:
             confirmacion = messagebox.askyesno("Confirmar", "¿Estás seguro de que deseas eliminar todas las marcaciones del dispositivo?", icon='warning', default='no')
             if confirmacion:
-                eliminar_asistencias(ip, int(puerto))
+                eliminar_asistencias(*conexion)
                 tree.delete(*tree.get_children())
             else:
                 messagebox.showinfo("Cancelado", "Eliminación cancelada.")
@@ -179,16 +188,11 @@ def eliminar_marcaciones():
             messagebox.showerror("Error", f"No se pudo conectar al biométrico: {e}")
 
 def obtener_info():
-    ip = entry_ip.get().strip()
-    puerto = entry_puerto.get().strip()
-
-    if not ip or not puerto:
-        messagebox.showwarning("Campos requeridos", "Por favor, ingresa la IP y el puerto del dispositivo.")
-        return
-
     try:
-        info = get_info(ip, int(puerto))
-       
+        conexion = datos_conexion()
+        if not conexion:
+            return
+        info = get_info(*conexion)
         if info:
             #limpiar scrollabe_frame_info
             for widget in frame_detalle_info.winfo_children():
@@ -218,37 +222,36 @@ def obtener_info():
                 ).grid(row=fila, column=1, padx=10, pady=4, sticky="nsew")
 
                 fila += 1
-
-
         else:
             messagebox.showinfo("Información", "No se pudo obtener la información del dispositivo.")
+            return
     except Exception as e:
         messagebox.showerror("Error", f"No se pudo conectar al biométrico: {e}")
 
 
 def obtener_usuarios():
-    ip = entry_ip.get().strip()
-    puerto = entry_puerto.get().strip()
-
-    if not ip or not puerto:
-        messagebox.showwarning("Campos requeridos", "Por favor, ingresa la IP y el puerto del dispositivo.")
-        return
-
     try:
-        usuarios = get_usuarios(ip, int(puerto))
+        conexion = datos_conexion()
+        if not conexion:
+            return
+        usuarios = get_usuarios(*conexion)
         tree_usuarios.delete(*tree_usuarios.get_children())
         contador = 0
+        
         if usuarios:
             for usuario in usuarios:
+                usuario = list(usuario)
                 #ocultar password si no está marcado el checkbutton
                 if not var_mostrar_password.get():
-                    usuario = list(usuario)
                     usuario[3] = "*" * len(usuario[3])
-                    usuario = tuple(usuario)
+                #agregar checkbutton vacío al inicio
+                usuario.insert(0, "\u2610")
                 tree_usuarios.insert("", "end", values=usuario)
                 contador += 1
         else:
             messagebox.showinfo("Información", "No se encontraron usuarios")
+            return
+        
         if contador == 1:  
             messagebox.showinfo("Éxito", f"Se halló {contador} usuario.")
         else:
@@ -257,21 +260,73 @@ def obtener_usuarios():
         messagebox.showerror("Error", f"No se pudo conectar al biométrico: {e}")
 
 def sincronizar_hora():
-    ip = entry_ip.get().strip()
-    puerto = entry_puerto.get().strip()
-
-    if not ip or not puerto:
-        messagebox.showwarning("Campos requeridos", "Por favor, ingresa la IP y el puerto del dispositivo.")
-        return
-
     try:
-        exito = set_time(ip, int(puerto))
+        conexion = datos_conexion()
+        if not conexion:
+            return
+        exito = set_time(*conexion)
         if exito:
             messagebox.showinfo("Éxito", "Hora sincronizada con éxito.")
         else:
             messagebox.showinfo("Información", "No se pudo sincronizar la hora.")
     except Exception as e:
         messagebox.showerror("Error", f"No se pudo conectar al biométrico: {e}")
+
+def eliminar_usuarios():
+    try:
+        conexion = datos_conexion()
+        if not conexion:
+            return
+        ip, puerto = conexion
+        confirmacion = messagebox.askyesno("Confirmación","¿Desea eliminar los usuarios seleccionados?")
+        if confirmacion:
+            resultado = delete_users(ip, puerto, usuarios_seleccionados)
+            if resultado:
+                messagebox.showinfo("Éxito", "Usuarios eliminados")
+                obtener_usuarios()
+            else:
+                messagebox.showinfo("Información", "No se eliminaron usuarios.")
+        else:
+            messagebox.showinfo("Cancelado", "Eliminacion cancelada")
+    except Exception as e:
+        messagebox.showerror("Error", f"No se pudo conectar al biométrico: {e}")
+            
+def toggle_check_usuarios(event):
+    region = tree_usuarios.identify("region", event.x, event.y)
+    item = tree_usuarios.identify_row(event.y)
+    column = tree_usuarios.identify_column(event.x)
+
+    # --- Click en una celda de la columna Check ---
+    if region == "cell" and column == "#1" and item:
+        current_value = tree_usuarios.set(item, "Check") or "\u2610"  # si está vacío, usar ☐
+        new_value = "\u2611" if current_value == "\u2610" else "\u2610"  # alterna ☑ / ☐
+        tree_usuarios.set(item, "Check", new_value)
+        seleccionar_usuarios(new_value, item)
+        return "break"
+
+    # --- Click en el encabezado de la columna Check ---
+    if region == "heading" and column == "#1":
+        children = tree_usuarios.get_children()
+        if not children:
+            return "break"
+        # Si todas las filas están marcadas, desmarcar; si no, marcar todas
+        all_checked = all((tree_usuarios.set(child, "Check") or "\u2610") == "\u2611" for child in children)
+        new_value = "\u2610" if all_checked else "\u2611"
+        usuarios_seleccionados.clear()  
+        for child in children:
+            tree_usuarios.set(child, "Check", new_value)
+            seleccionar_usuarios(new_value, child)
+        return "break"
+
+    
+def seleccionar_usuarios(new_value, item):
+    id_usuario = tree_usuarios.set(item, "Id usuario")
+    if new_value == "\u2611":
+        if id_usuario not in usuarios_seleccionados:
+                usuarios_seleccionados.append(id_usuario)
+    else:
+        if id_usuario in usuarios_seleccionados:
+                usuarios_seleccionados.remove(id_usuario)
 
 def mostrar_frame_info():
     if frame_asistencias.winfo_ismapped() or frame_usuarios:
@@ -339,7 +394,7 @@ frame_conexion.pack(pady=10)
 ttk.Label(frame_conexion, text="IP del dispositivo:").grid(row=0, column=0, padx=5)
 entry_ip = ttk.Entry(frame_conexion, validate="key", validatecommand=vcmd_ip)
 entry_ip.grid(row=0, column=1, padx=5)
-entry_ip.insert(0, "192.168.1.67")  # Valor por defecto
+entry_ip.insert(0, "192.168.1.167")  # Valor por defecto
 
 ttk.Label(frame_conexion, text="Puerto:").grid(row=1, column=0, padx=5)
 entry_puerto = ttk.Entry(frame_conexion, validate="key", validatecommand=vcmd_puerto)
@@ -423,7 +478,7 @@ frame_detalle_info = ScrolledFrame(frame_info)
 frame_detalle_info.pack(pady=10, fill="both", expand=True)
 
 #sincronizar hora
-btn_sincronizar_hora = ttk.Button(frame_info, text="Sincronizar hora Peru ⏱️", command=sincronizar_hora)
+btn_sincronizar_hora = ttk.Button(frame_info, text="Sincronizar hora ⏱️", command=sincronizar_hora)
 btn_sincronizar_hora.pack(pady=5)
 
 #<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<< usuarios >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
@@ -443,16 +498,17 @@ check_password.pack(side="top", pady=3)
 #tabla usuarios
 frame_tabla_usuarios = ttk.Frame(frame_usuarios)
 frame_tabla_usuarios.pack(fill="both", expand=True, padx=10, pady=5)
-columns_usuarios = ("Id usuario", "Nombre", "Privilegio", "Password", "Tarjeta") 
+columns_usuarios = ("Check","Id usuario", "Nombre", "Privilegio", "Password", "Tarjeta") 
 tree_usuarios = ttk.Treeview(frame_tabla_usuarios, columns=columns_usuarios, show="headings")
-#tree_usuarios.heading("#", text="#")
+tree_usuarios.bind("<Button-1>", toggle_check_usuarios)  # Evento clic izquierdo
+tree_usuarios.heading("Check", text="")  # Columna para checkbutton
 tree_usuarios.heading("Id usuario", text="Id usuario")
 tree_usuarios.heading("Nombre", text="Nombre")
 tree_usuarios.heading("Privilegio", text="Privilegio")
 tree_usuarios.heading("Password", text="Password")  
 tree_usuarios.heading("Tarjeta", text="Tarjeta")
-
-#tree_usuarios.column("#", width=30, anchor='center')
+#columnas
+tree_usuarios.column("Check", width=30, anchor='center', stretch=False,)
 tree_usuarios.column("Id usuario", width=80, anchor='center')
 tree_usuarios.column("Nombre", width=130, anchor='w')
 tree_usuarios.column("Privilegio", width=50, anchor='center')
@@ -478,7 +534,7 @@ btn_agregar_usuarios.pack(side="left", pady=5, padx=5)
 btn_exportar_usuarios = ttk.Button(contenedor_botones_usuarios, text="Exportar usuario", command=exportar_usb)
 btn_exportar_usuarios.pack(side="left", pady=5, padx=5)
 
-btn_eliminar_usuarios = ttk.Button(contenedor_botones_usuarios, text="Eliminar usuario", command=exportar_excel)
+btn_eliminar_usuarios = ttk.Button(contenedor_botones_usuarios, text="Eliminar usuario", command=eliminar_usuarios)
 btn_eliminar_usuarios.pack(side="left", pady=5, padx=5)
 
 #<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<< barra de menu superior >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
