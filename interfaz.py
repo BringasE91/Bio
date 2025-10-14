@@ -2,14 +2,10 @@ import tkinter as tk
 from tkinter import messagebox
 import ttkbootstrap as ttk
 from ttkbootstrap.constants import *
-from biometrico import obtener_asistencias
-from biometrico import eliminar_asistencias
-from biometrico import get_info
-from biometrico import set_time
-from biometrico import get_usuarios
-from biometrico import delete_users
+from biometrico import *
 from ttkbootstrap.scrolled import ScrolledFrame
 from tkinter import filedialog
+from tksheet import Sheet
 import openpyxl
 import os
 from datetime import datetime
@@ -17,6 +13,7 @@ import sys
 import os
 
 exportar_usb_data = []
+global usuarios_seleccionados 
 usuarios_seleccionados = []
 
 def resource_path(*parts):
@@ -29,12 +26,13 @@ def resource_path(*parts):
 def datos_conexion():
     ip = entry_ip.get().strip()
     puerto = entry_puerto.get().strip()
-    
+
     if not ip or not puerto:
         messagebox.showwarning("Campos requeridos", "Por favor, ingresa la IP y el puerto del dispositivo.")
         return None
     else:
         return ip, int(puerto)
+        
 
 def descargar_asistencia():
    
@@ -185,7 +183,7 @@ def eliminar_marcaciones():
                 return
             
     except Exception as e:
-            messagebox.showerror("Error", f"No se pudo conectar al biométrico: {e}")
+            messagebox.showerror("Error", str(e))
 
 def obtener_info():
     try:
@@ -226,7 +224,7 @@ def obtener_info():
             messagebox.showinfo("Información", "No se pudo obtener la información del dispositivo.")
             return
     except Exception as e:
-        messagebox.showerror("Error", f"No se pudo conectar al biométrico: {e}")
+        messagebox.showerror("Error", str(e))
 
 
 def obtener_usuarios():
@@ -253,11 +251,11 @@ def obtener_usuarios():
             return
         
         if contador == 1:  
-            messagebox.showinfo("Éxito", f"Se halló {contador} usuario.")
+            messagebox.showinfo("Éxito", f"Se halló {contador} registro")
         else:
-            messagebox.showinfo("Éxito", f"Se hallaron {contador} usuarios.")
+            messagebox.showinfo("Éxito", f"Se hallaron {contador} registros.")
     except Exception as e:
-        messagebox.showerror("Error", f"No se pudo conectar al biométrico: {e}")
+        messagebox.showerror("Error", str(e))
 
 def sincronizar_hora():
     try:
@@ -270,7 +268,7 @@ def sincronizar_hora():
         else:
             messagebox.showinfo("Información", "No se pudo sincronizar la hora.")
     except Exception as e:
-        messagebox.showerror("Error", f"No se pudo conectar al biométrico: {e}")
+        messagebox.showerror("Error", str(e))
 
 def eliminar_usuarios():
     try:
@@ -280,16 +278,22 @@ def eliminar_usuarios():
         ip, puerto = conexion
         confirmacion = messagebox.askyesno("Confirmación","¿Desea eliminar los usuarios seleccionados?")
         if confirmacion:
+            if not usuarios_seleccionados:
+                messagebox.showwarning("Aviso", "No hay usuarios seleccionados")
+                return
             resultado = delete_users(ip, puerto, usuarios_seleccionados)
             if resultado:
-                messagebox.showinfo("Éxito", "Usuarios eliminados")
+                usuarios_eliminados = len(usuarios_seleccionados)
+                usuarios_seleccionados.clear()
+                mensaje = "1 usuario eliminado correctamente." if usuarios_eliminados == 1 else f"{usuarios_eliminados} usuarios eliminados correctamente."
+                messagebox.showinfo("Éxito", mensaje)
                 obtener_usuarios()
             else:
                 messagebox.showinfo("Información", "No se eliminaron usuarios.")
         else:
             messagebox.showinfo("Cancelado", "Eliminacion cancelada")
     except Exception as e:
-        messagebox.showerror("Error", f"No se pudo conectar al biométrico: {e}")
+        messagebox.showerror("Error", str(e))
             
 def toggle_check_usuarios(event):
     region = tree_usuarios.identify("region", event.x, event.y)
@@ -328,6 +332,154 @@ def seleccionar_usuarios(new_value, item):
         if id_usuario in usuarios_seleccionados:
                 usuarios_seleccionados.remove(id_usuario)
 
+
+def modal_agregar_usuario():
+    frame_agregar_usuario = ttk.Toplevel(root)
+    frame_agregar_usuario.title("Agregar usuarios")
+    frame_agregar_usuario.geometry("600x400")
+    frame_agregar_usuario.resizable(False, True)
+    frame_agregar_usuario.grab_set()
+    frame_agregar_usuario.transient(root)
+
+
+    # Frame para la hoja
+    frame_sheet_usuario = ttk.Frame(frame_agregar_usuario,height=50)
+    frame_sheet_usuario.pack(padx=10, pady=10, fill="x", expand=True)
+    
+    # Hoja de cálculo
+    sheet_agregar_usuario = Sheet(
+        frame_sheet_usuario,
+        headers=["Id", "Nombre", "Contraseña", "Tarjeta"],
+        show_x_scrollbar=True,
+        show_y_scrollbar=True
+    )
+  
+    sheet_agregar_usuario.enable_bindings(
+        "single_select",
+        "edit_cell",
+        "arrowkeys",
+        "copy",
+        "paste")
+    
+    # Función de validación
+    def validar_entrada(event):
+        column = event.column
+        value = event.value
+        
+        # Columnas que solo aceptan dígitos: Id (0), Contraseña (2), Tarjeta (3)
+        columnas_solo_digitos = [0, 2, 3]
+        
+        if column in columnas_solo_digitos:
+            # Solo permite dígitos y string vacío
+            if value and not value.isdigit():
+                return None  # Rechaza la entrada
+        
+        return value  # Acepta la entrada
+    
+    # Aplicar validación
+    sheet_agregar_usuario.edit_validation(validar_entrada)
+
+    # Anchos específicos
+    sheet_agregar_usuario.column_width(0, 100)
+    sheet_agregar_usuario.column_width(1, 100)
+    sheet_agregar_usuario.column_width(2, 100)
+    sheet_agregar_usuario.column_width(3, 100)
+    
+    sheet_agregar_usuario.pack(fill="x", expand=True)
+    sheet_agregar_usuario.insert_row(["", "", "", ""])
+    #sheet_agregar_usuario.bind("<<SheetCellEditBeginning>>")
+
+    #funciones dentro del modal
+
+    def agregar_datos_usuario():
+        conexion = datos_conexion()
+        if not conexion:
+            return 
+        ip, puerto = conexion
+
+        respuesta = messagebox.askyesno("Guardar usuarios", "¿Desea guardar los usuarios agregados?")
+
+        if respuesta:
+            datos = sheet_agregar_usuario.get_sheet_data(get_header=False, get_index=True)
+
+            if not datos:
+                messagebox.showwarning("Sin datos", "No hay usuarios para agregar")
+                return
+            
+            filas_no_validas= []
+            contador_validos = 0
+
+            ultimo_uid = get_last_uid(ip=ip, puerto=puerto)
+            
+            if not ultimo_uid:
+                messagebox.showerror("Error", "No se agregaron usuarios")
+                return
+
+            for fila in datos:
+
+                indice = int(fila[0])
+                usuario_id = fila[1]
+                nombre = fila[2]
+                contraseña = fila[3]
+                tarjeta = fila[4]
+                ultimo_uid = (ultimo_uid + 1)
+
+                #validamos id
+                if not usuario_id or str(usuario_id.strip()) =="":
+                    filas_no_validas.append(indice)
+                    continue
+                else:
+                    usuario_dict={
+                        'uid' : ultimo_uid,
+                        'name': nombre if nombre else "",
+                        'privilege': "",
+                        'password': contraseña if contraseña else "",
+                        'user_id': str(usuario_id).strip(),
+                        'card': tarjeta if tarjeta else ""
+                    }
+                try:
+                    exito = set_usuario(ip=ip, puerto=puerto, user=usuario_dict)
+                    if exito:
+                        contador_validos += 1
+                    else:
+                        filas_no_validas.append(indice)
+                except Exception as e:
+                    messagebox.showerror("Error", f"Error al agregar {usuario_id}: {e}")
+                    filas_no_validas.append(indice)
+
+        #resalta filas no validas.
+       
+            for fila_idx in filas_no_validas:
+                    sheet_agregar_usuario.highlight_rows([fila_idx - 1], bg="#fd9696", fg="black")
+                
+        messagebox.showinfo("Usuarios agregados", f"Se agregaron con éxito {contador_validos} usuario(s) de {len(datos)} registros")
+
+    def agregar_fila():
+        sheet_agregar_usuario.insert_row(["","","",""])
+
+    def cancelar_agregar_usuario():
+        respuesta = messagebox.askokcancel("Confirmar cancelación", "No se guardarán los usuarios no confirmados", default="cancel")
+        if respuesta:
+            frame_agregar_usuario.destroy()
+        
+    #botones del modal
+    frame_botones_agregar = ttk.Frame(frame_agregar_usuario)
+    frame_botones_agregar.pack(pady=10, expand=True, fill="x")
+
+    sub_frame_botones = ttk.Frame(frame_botones_agregar)
+    sub_frame_botones.pack(anchor="center")
+
+    btn_agregar = ttk.Button(sub_frame_botones, command=agregar_fila, text="Agregar Usuario Adicional")
+    btn_agregar.pack(pady=10, padx=10, side="left")
+
+    btn_confirmar = ttk.Button(sub_frame_botones, command=agregar_datos_usuario, text="Confirmar")
+    btn_confirmar.pack(pady=10, padx=10, side="left")
+
+    btn_cancelar = ttk.Button(sub_frame_botones,text= "Cancelar", command= cancelar_agregar_usuario)
+    btn_cancelar.pack(pady=10, padx=10, side="left")
+                
+    root.wait_window(frame_agregar_usuario)
+
 def mostrar_frame_info():
     if frame_asistencias.winfo_ismapped() or frame_usuarios:
         frame_asistencias.pack_forget()
@@ -346,6 +498,8 @@ def mostrar_frame_usuarios():
         frame_asistencias.pack_forget()
     frame_usuarios.pack(fill="both", expand=True, padx=10, pady=10)
 
+
+    
 #<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<< interfaz gráfica >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
 
 root = ttk.Window(
@@ -384,6 +538,7 @@ vcmd_puerto = (root.register(solo_puerto), "%P")
 vcmd_dispositivo = (root.register(solo_id_bio), "%P")
 
 
+
 # <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<  conexion >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
 
 #frame conexion
@@ -394,7 +549,7 @@ frame_conexion.pack(pady=10)
 ttk.Label(frame_conexion, text="IP del dispositivo:").grid(row=0, column=0, padx=5)
 entry_ip = ttk.Entry(frame_conexion, validate="key", validatecommand=vcmd_ip)
 entry_ip.grid(row=0, column=1, padx=5)
-entry_ip.insert(0, "192.168.1.167")  # Valor por defecto
+entry_ip.insert(0, "192.168.1.57")  # Valor por defecto
 
 ttk.Label(frame_conexion, text="Puerto:").grid(row=1, column=0, padx=5)
 entry_puerto = ttk.Entry(frame_conexion, validate="key", validatecommand=vcmd_puerto)
@@ -501,7 +656,7 @@ frame_tabla_usuarios.pack(fill="both", expand=True, padx=10, pady=5)
 columns_usuarios = ("Check","Id usuario", "Nombre", "Privilegio", "Password", "Tarjeta") 
 tree_usuarios = ttk.Treeview(frame_tabla_usuarios, columns=columns_usuarios, show="headings")
 tree_usuarios.bind("<Button-1>", toggle_check_usuarios)  # Evento clic izquierdo
-tree_usuarios.heading("Check", text="")  # Columna para checkbutton
+tree_usuarios.heading("Check", text="\u2610")  # Columna para checkbutton
 tree_usuarios.heading("Id usuario", text="Id usuario")
 tree_usuarios.heading("Nombre", text="Nombre")
 tree_usuarios.heading("Privilegio", text="Privilegio")
@@ -528,31 +683,32 @@ frame_botones_usuarios.pack( side="bottom", fill="both")
 contenedor_botones_usuarios = ttk.Frame(frame_botones_usuarios)
 contenedor_botones_usuarios.pack(anchor="center", pady=5)
 
-btn_agregar_usuarios = ttk.Button(contenedor_botones_usuarios, text="Agregar usuario", command=exportar_usb)
+btn_agregar_usuarios = ttk.Button(contenedor_botones_usuarios, text="Agregar usuario", command=modal_agregar_usuario)
 btn_agregar_usuarios.pack(side="left", pady=5, padx=5)
 
 btn_exportar_usuarios = ttk.Button(contenedor_botones_usuarios, text="Exportar usuario", command=exportar_usb)
 btn_exportar_usuarios.pack(side="left", pady=5, padx=5)
 
-btn_eliminar_usuarios = ttk.Button(contenedor_botones_usuarios, text="Eliminar usuario", command=eliminar_usuarios)
+btn_eliminar_usuarios = ttk.Button(contenedor_botones_usuarios, text="Eliminar usuario ⚠️", command=eliminar_usuarios, style="danger")
 btn_eliminar_usuarios.pack(side="left", pady=5, padx=5)
 
+#<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<ventana agregar usuario>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+
+   
+    
 #<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<< barra de menu superior >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
 
-# Lista de botones y sus comandos
-botones_menu = [
-    ("Información", mostrar_frame_info),
-    ("Asistencias", mostrar_frame_asistencias),
-    ("Usuarios", mostrar_frame_usuarios)
-]
+#botones alineados horizontalmente
+btn = ttk.Button(frame_botones_menu, text="Información", command=mostrar_frame_info)
+btn.pack(side="left", padx=1)
 
-# Crear botones alineados horizontalmente
-for texto, comando in botones_menu:
-    btn = ttk.Button(frame_botones_menu, text=texto, command=comando)
-    btn.pack(side="left", padx=1)
+btn = ttk.Button(frame_botones_menu, text="Asistencias", command=mostrar_frame_asistencias)
+btn.pack(side="left", padx=1)
+
+btn = ttk.Button(frame_botones_menu, text="Usuarios", command=mostrar_frame_usuarios)
+btn.pack(side="left", padx=1)
 
 
-  # Mostrar el frame de info al iniciar
 root.mainloop()
 
 # Para crear el ejecutable con PyInstaller, usar el siguiente comando en la terminal:
