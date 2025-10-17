@@ -20,6 +20,11 @@ def obtener_asistencias(ip, puerto):
 
     try:
         conn = zk.connect()
+
+        if not conn:
+            print("biometrico no encontrado")
+            return
+        
         conn.disable_device()
 
         asistencias = conn.get_attendance()
@@ -33,8 +38,9 @@ def obtener_asistencias(ip, puerto):
         raise Exception(f"No se pudo conectar al biometrico: {e}")
     
     finally:
-        conn.enable_device()
-        conn.disconnect()
+        if conn:
+            conn.enable_device()
+            conn.disconnect()
     return registros
 
 
@@ -47,6 +53,7 @@ def get_usuarios(ip, puerto):
 
     try:
         conn = zk.connect()
+
         conn.disable_device()
 
         usuarios_bio = conn.get_users()
@@ -63,10 +70,11 @@ def get_usuarios(ip, puerto):
         raise Exception(f"No se pudo conectar al biometrico: {e}")
     
     finally:
-        conn.enable_device()
-        conn.disconnect()
+        if conn:
+            conn.enable_device()
+            conn.disconnect()
     
-    return usuarios
+    return usuarios_bio
 
 def set_time(ip, puerto):
 
@@ -93,8 +101,9 @@ def set_time(ip, puerto):
     except Exception as e:
         raise Exception(f"No se pudo conectar al biometrico: {e}")
     finally:
-        conn.enable_device()
-        conn.disconnect()
+       if conn:
+            conn.enable_device()
+            conn.disconnect()
 
 
 def get_info(ip, puerto):
@@ -103,34 +112,38 @@ def get_info(ip, puerto):
 
     try:
         conn = zk.connect()
+        if not conn:
+            print("biometrico no encontrado")
+            return
         conn.disable_device()
         conn.read_sizes()
         info = {
+            "hora": conn.get_time().time(),
+            "fecha": conn.get_time().date(),
             "nombre_dispositivo": conn.get_device_name(),
             "numero_de_serie": conn.get_serialnumber(),
             "firmware_version": conn.get_firmware_version(),
             "platforma": conn.get_platform(),
             "MAC": conn.get_mac(),
-            "fecha_hora": conn.get_time(),
             "face_version": f"ZKFace VX{conn.get_face_version()}",
             "fp_version": f"ZKFinger VX{conn.get_fp_version()}",
-            "cant_usuarios": conn.users,
-            "cant_usuarios_max": conn.users_cap,
-            "cant_huellas": conn.fingers,
-            "cant_huellas_max": conn.fingers_cap,
-            "cant_rostros": conn.faces,
-            "cant_rostros_max": conn.faces_cap,
-            "cant_asistencias": conn.records,
-            "cant_asistencias_max": conn.rec_cap
+            "cant._usuarios": f"{conn.users}/{conn.users_cap}",
+            #"cant_usuarios_max": conn.users_cap,
+            "cant._huellas": f"{conn.fingers}/{conn.fingers_cap}",
+            #"cant_huellas_max": conn.fingers_cap,
+            "cant._rostros": f"{conn.faces}/{conn.faces_cap}",
+            #"cant_rostros_max": conn.faces_cap,
+            "cant._asistencias": f"{conn.records}/{conn.rec_cap}",
+            #"cant_asistencias_max": conn.rec_cap
         }
        
     except Exception as e:
         raise Exception(f"No se pudo conectar al biometrico: {e}")
     
     finally:
-        conn.enable_device()
-        conn.disconnect()
-    
+        if conn:
+            conn.enable_device()
+            conn.disconnect()
     return info
 
 def eliminar_asistencias(ip, puerto):
@@ -146,10 +159,10 @@ def eliminar_asistencias(ip, puerto):
         raise Exception(f"No se pudo conectar al biometrico: {e}")
     
     finally:
-        conn.enable_device()
-        conn.disconnect()
+        if conn:
+            conn.enable_device()
+            conn.disconnect()
     
-    return True
 
 def delete_users(ip, puerto, users):
     zk = ZK(ip, puerto, timeout=5, force_udp=False, ommit_ping=True)
@@ -177,8 +190,9 @@ def delete_users(ip, puerto, users):
         print(f"[Error delete_users] {e}")
         return False
     finally:
-        conn.enable_device()
-        conn.disconnect()
+        if conn:
+            conn.enable_device()
+            conn.disconnect()
 
 def set_usuario(ip, puerto, user):
     zk = ZK(ip, puerto, timeout=5, force_udp=False, ommit_ping=True)
@@ -194,8 +208,13 @@ def set_usuario(ip, puerto, user):
             conn.enable_device()
             conn.disconnect()
             return False
-    
-        conn.set_user(**user)
+        
+        used_uids = set(user.uid for user in conn.get_users())
+        uid = 1
+        while uid in used_uids:
+            uid += 1
+
+        conn.set_user(uid=uid,**user)
         return True
 
     except Exception as e:
@@ -203,34 +222,72 @@ def set_usuario(ip, puerto, user):
         return False
     
     finally:
-        conn.enable_device()
-        conn.disconnect()
+        if conn:
+            conn.enable_device()
+            conn.disconnect()
 
 def get_last_uid(ip, puerto):
+    """Obtiene el UID más alto de los usuarios registrados."""
     zk = ZK(ip, puerto, timeout=5, force_udp=False, ommit_ping=True)
-
+    conn = None
+    
     try:
         conn = zk.connect()
         if not conn:
+            print("No se pudo establecer conexión")
             return False
         
         conn.disable_device()
-        
         users = conn.get_users()
-        uid = 0
-
+        
         if not users:
-            conn.enable_device()
-            conn.disconnect()
-            return False
-        for user in users:
-            uid = user.uid
+            #print("No hay usuarios registrados")
+            return "0"
+        
+        # Obtener el UID más alto
+        uid = max(user.uid for user in users)
         return int(uid)
-    
+        
     except Exception as e: 
-        print(f"error: {e}")
+        print(f"Error al obtener último UID: {e}")
+        return False
+        
+    finally:
+        if conn:
+            try:
+                conn.enable_device()
+            except Exception as e:
+                print(f"Error al habilitar dispositivo: {e}")
+            
+            try:
+                conn.disconnect()
+            except Exception as e:
+                print(f"Error al desconectar: {e}")
+
+def get_templates(ip, puerto):
+    zk = ZK(ip, puerto, timeout=5, force_udp=False, ommit_ping=True)
+    try:
+        conn = zk.connect()
+        conn.connect()
+        conn.disable_device()
+
+        if not conn:
+            print("No se puede conectar el dispositivo")
+            return False
+        
+        template = conn.get_templates()
+        return template
+
+    except:
         return False
     finally:
-        conn.enable_device()
-        conn.disconnect
-
+        if conn:
+            try:
+                conn.enable_device()
+            except Exception as e:
+                print(f"Error al habilitar dispositivo: {e}")
+            
+            try:
+                conn.disconnect()
+            except Exception as e:
+                print(f"Error al desconectar: {e}")
